@@ -6,6 +6,49 @@ import { FocusStats } from './cards/FocusStats';
 import { ChartCard } from './charts/ChartCard';
 import { TimeWindowTabs } from './layout/TimeWindowTabs';
 import { RankingTable } from './tables/RankingTable';
+import { SymbolPicker } from './controls/SymbolPicker';
+
+describe('SymbolPicker', () => {
+  it('calls onSelect with the normalised upper-case symbol when submitted', async () => {
+    const onSelect = vi.fn();
+    render(<SymbolPicker onSelect={onSelect} />);
+    await userEvent.type(screen.getByRole('textbox'), 'aapl');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onSelect).toHaveBeenCalledWith('AAPL');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows an inline error and does not call onSelect for an empty value', async () => {
+    const onSelect = vi.fn();
+    render(<SymbolPicker onSelect={onSelect} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('shows an inline error for an invalid symbol and clears it on valid resubmit', async () => {
+    const onSelect = vi.fn();
+    render(<SymbolPicker onSelect={onSelect} />);
+    await userEvent.type(screen.getByRole('textbox'), '!!!');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole('textbox'));
+    await userEvent.type(screen.getByRole('textbox'), 'TSLA');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(onSelect).toHaveBeenCalledWith('TSLA');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('marks the input aria-invalid when there is an error', async () => {
+    render(<SymbolPicker onSelect={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+
 
 describe('QuoteCard', () => {
   const quote = { symbol: 'IBM', name: 'IBM', price: 230, change: -1.5, changePct: -0.65, currency: 'USD', asOf: 0 };

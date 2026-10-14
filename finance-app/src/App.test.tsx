@@ -138,3 +138,96 @@ describe('Failure handling', () => {
     expect(await screen.findByText('History down')).toBeInTheDocument();
   });
 });
+
+describe('SymbolPicker + SelectedCompanySection (AC7 regression + new feature)', () => {
+  it('AC7: existing dashboards are unchanged after entering a symbol', async () => {
+    render(<App service={mock()} />);
+
+    // Existing quote cards and comparison chart are present
+    for (const symbol of COMPANY_SYMBOLS) {
+      expect(await screen.findByLabelText(`${symbol} quote`)).toBeInTheDocument();
+    }
+    expect(screen.getByRole('table', { name: /Change — Current day/ })).toBeInTheDocument();
+
+    // Submit a symbol via the picker
+    await userEvent.type(screen.getByRole('textbox'), 'AAPL');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+
+    // Existing dashboards still fully present
+    for (const symbol of COMPANY_SYMBOLS) {
+      expect(screen.getByLabelText(`${symbol} quote`)).toBeInTheDocument();
+    }
+    expect(screen.getByRole('table', { name: /Change — Current day/ })).toBeInTheDocument();
+  });
+
+  it('shows the new chart card after a valid symbol is submitted', async () => {
+    render(<App service={mock()} />);
+    await userEvent.type(screen.getByRole('textbox'), 'IBM');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+
+    // ChartCard labelled with the symbol appears
+    expect(await screen.findByLabelText('IBM price')).toBeInTheDocument();
+    expect(await screen.findByTestId('area-trend-chart')).toBeInTheDocument();
+  });
+
+  it('shows a clear no-data message for an unknown symbol (INVALID_SYMBOL)', async () => {
+    const withBadSymbol = withOverrides({
+      getHistory: (symbol: string, window: TimeWindow): Promise<PriceSeries> =>
+        symbol === 'ZZZZ'
+          ? Promise.reject(new MarketError('INVALID_SYMBOL', 'Symbol not found'))
+          : mock().getHistory(symbol, window),
+    });
+    render(<App service={withBadSymbol} />);
+
+    await userEvent.type(screen.getByRole('textbox'), 'ZZZZ');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+
+    expect(await screen.findByText('"ZZZZ" is not a recognised ticker symbol.')).toBeInTheDocument();
+  });
+
+  it('shows a network error message and a Retry button when the service fails', async () => {
+    const withNetErr = withOverrides({
+      getHistory: (symbol: string, window: TimeWindow): Promise<PriceSeries> =>
+        symbol === 'TSLA'
+          ? Promise.reject(new MarketError('NETWORK', 'Network down'))
+          : mock().getHistory(symbol, window),
+    });
+    render(<App service={withNetErr} />);
+
+    await userEvent.type(screen.getByRole('textbox'), 'TSLA');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+
+    expect(await screen.findByText('Network down')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('TSLA price')).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('shows a no-data message when the symbol resolves but has no usable points', async () => {
+    const sparse = withOverrides({
+      getHistory: (symbol: string, window: TimeWindow): Promise<PriceSeries> =>
+        symbol === 'EMPTY'
+          ? Promise.resolve({ symbol, window, points: [{ t: 1, close: 1 }] })
+          : mock().getHistory(symbol, window),
+    });
+    render(<App service={sparse} />);
+
+    await userEvent.type(screen.getByRole('textbox'), 'EMPTY');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+
+    expect(await screen.findByText('No price data is available for "EMPTY".')).toBeInTheDocument();
+  });
+
+  it('updates the chart when a new symbol is submitted', async () => {
+    render(<App service={mock()} />);
+
+    await userEvent.type(screen.getByRole('textbox'), 'IBM');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(await screen.findByLabelText('IBM price')).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole('textbox'));
+    await userEvent.type(screen.getByRole('textbox'), 'MSFT');
+    await userEvent.click(screen.getByRole('button', { name: 'Add chart' }));
+    expect(await screen.findByLabelText('MSFT price')).toBeInTheDocument();
+    expect(screen.queryByLabelText('IBM price')).not.toBeInTheDocument();
+  });
+});
+

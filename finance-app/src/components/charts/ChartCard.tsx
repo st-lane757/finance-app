@@ -11,6 +11,8 @@ interface ChartCardProps {
   onRetry?: () => void;
   /** When true on success, renders the empty state instead of children. */
   isEmpty?: boolean;
+  /** Custom message for the empty state. */
+  emptyMessage?: string;
   children: ReactNode;
 }
 
@@ -22,6 +24,7 @@ export function ChartCard({
   errorMessage = 'Unable to load data.',
   onRetry,
   isEmpty = false,
+  emptyMessage,
   children,
 }: ChartCardProps) {
   return (
@@ -33,7 +36,7 @@ export function ChartCard({
       <ErrorBoundary>
         {status === 'loading' && <LoadingState />}
         {status === 'error' && <ErrorState message={errorMessage} onRetry={onRetry} />}
-        {status === 'success' && (isEmpty ? <EmptyState /> : children)}
+        {status === 'success' && (isEmpty ? <EmptyState message={emptyMessage} /> : children)}
       </ErrorBoundary>
     </section>
   );
